@@ -17,6 +17,8 @@ use crate::server::AMLLWebSocketServerWrapper;
 
 mod db;
 mod db_events;
+#[cfg(target_os = "linux")]
+mod linux_graphics;
 mod logging;
 mod music_info;
 mod player;
@@ -189,6 +191,9 @@ fn handle_window_event(_window: &tauri::Window, _event: &tauri::WindowEvent) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "linux")]
+    linux_graphics::configure_nvidia_wayland();
+
     // Install ring as the default crypto provider for rustls, because multiple providers
     // (aws-lc-rs and ring) might be enabled in our dependency tree and rustls demands one to be explicitly chosen.
     #[cfg(target_os = "android")]

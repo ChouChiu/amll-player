@@ -60,7 +60,7 @@ import { useDbQuery } from "../../utils/use-db-query.ts";
 export const FFTToLowPassContext: FC = () => {
 	const store = useStore();
 	const fftDataRange = useAtomValue(fftDataRangeAtom);
-	// const isLyricPageOpened = useAtomValue(isLyricPageOpenedAtom);
+	const isLyricPageOpened = useAtomValue(isLyricPageOpenedAtom);
 
 	useEffect(() => {
 		emitAudioThread("setFFTRange", {
@@ -70,7 +70,9 @@ export const FFTToLowPassContext: FC = () => {
 	}, [fftDataRange]);
 
 	useEffect(() => {
-		// if (!isLyricPageOpened) return;
+		// The low-frequency value only drives the full-screen lyric background.
+		// Keep this loop stopped while that view is hidden.
+		if (!isLyricPageOpened) return;
 		let rafId: number;
 		let curValue = 1;
 		let lt = 0;
@@ -134,8 +136,7 @@ export const FFTToLowPassContext: FC = () => {
 		return () => {
 			cancelAnimationFrame(rafId);
 		};
-	}, [store]);
-	// }, [store, isLyricPageOpened]);
+	}, [store, isLyricPageOpened]);
 
 	return null;
 };
@@ -362,7 +363,12 @@ export const LocalMusicContext: FC = () => {
 				const duration = store.get(musicDurationAtom) / 1000;
 				const clampedPos = Math.min(newPos, duration || 0);
 
-				store.set(musicPlayingPositionAtom, (clampedPos * 1000) | 0);
+				lastSyncRef.current.position = clampedPos;
+				lastSyncRef.current.timestamp = now;
+				const nextPosition = (clampedPos * 1000) | 0;
+				if (nextPosition !== store.get(musicPlayingPositionAtom)) {
+					store.set(musicPlayingPositionAtom, nextPosition);
+				}
 			} else {
 				const currentUIPosition = store.get(musicPlayingPositionAtom) / 1000;
 				lastSyncRef.current.position = currentUIPosition;
