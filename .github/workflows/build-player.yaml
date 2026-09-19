@@ -65,29 +65,36 @@ jobs:
             arch: aarch64
             artifact_name_suffix: macos-arm64
             package_extension: tar.gz
-            os_runner: macos-14
+            os_runner: macos-15
           - platform: macos-latest # x86 二进制包
             args: "--target x86_64-apple-darwin"
             name: macOS
             arch: x86_64
             artifact_name_suffix: macos-x64
             package_extension: tar.gz
-            os_runner: macos-latest
+            os_runner: macos-15 # 与 arm64 行同镜像同 SDK，靠 --target 交叉编译
 
     runs-on: ${{ matrix.os_runner }}
 
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         name: 克隆仓库
         with:
           fetch-depth: 0 # 为了正确生成开发版本号码
 
+      # 固定 Xcode，避免镜像默认版本变动导致构建产物漂移
+      - name: "macOS: 固定 Xcode 版本"
+        uses: maxim-lobanov/setup-xcode@v1
+        if: matrix.platform == 'macos-latest'
+        with:
+          xcode-version: "16.4"
+
       - name: 安装 PNPM
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: 安装 Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: lts/*
           cache: pnpm
@@ -153,11 +160,11 @@ jobs:
           node ./packages/player/scripts/gen-dev-version.mjs
 
       - name: 构建 AMLL Player 程序并发布自动构建
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         with:
           projectPath: packages/player
           tagName: ${{ github.ref_name }}-player-dev
-          includeUpdaterJson: true
+          uploadUpdaterJson: true
           releaseName: AMLL Player ${{ github.ref_name }} branch development build
           releaseBody: |
             Latest ${{ github.ref_name }} branch development build.
@@ -174,7 +181,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
       - name: 上传产物到 Action Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: AMLL Player ${{matrix.name}}-${{matrix.arch}}
           path: |
@@ -188,16 +195,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         name: 克隆仓库
         with:
           fetch-depth: 0 # 为了正确生成开发版本号码
 
       - name: 安装 PNPM
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: 安装 Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: lts/*
           cache: pnpm
@@ -230,7 +237,7 @@ jobs:
           sudo apt-get install -y build-essential gcc-multilib g++-multilib
 
       - name: 设置 Android SDK/NDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: 安装 NDK
         run: sdkmanager --install "ndk;27.2.12479018"
@@ -278,13 +285,13 @@ jobs:
           done
 
       - name: 上传产物到 Action Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: AMLL Player Android Universal
           path: build-dist/*
 
       - name: 发布 Android 安装包至 GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}-player-dev
           prerelease: true
@@ -295,24 +302,27 @@ jobs:
   build-tauri-ios:
     name: 构建 Tauri iOS 版本
     needs: clean-pre-release
-    runs-on: macos-14
+    runs-on: macos-15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         name: 克隆仓库
         with:
           fetch-depth: 0
 
-      - name: 选择 Xcode 16 版本
+      # 不要升级到 Xcode 26：其移除了 libswiftCompatibility 5.x，
+      # 会导致 Tauri iOS 构建链接失败（tauri-apps/tauri#15066）。
+      # macos-15 镜像默认即为 Xcode 16.4。
+      - name: 选择 Xcode 16.4 版本
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: "16"
+          xcode-version: "16.4"
 
       - name: 安装 PNPM
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: 安装 Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: lts/*
           cache: pnpm
@@ -380,13 +390,13 @@ jobs:
           fi
 
       - name: 上传无签名 ipa 包至 GitHub Action Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: AMLL Player iOS Unsigned IPA
           path: "*.ipa"
 
       - name: 发布 iOS 安装包至 GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}-player-dev
           prerelease: true
