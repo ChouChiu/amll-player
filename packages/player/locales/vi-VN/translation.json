@@ -485,6 +485,7 @@
 					"lys": "Lời bài hát định dạng Lyricify Syllable (lys)",
 					"none": "Không có lời bài hát",
 					"qrc": "Lời bài hát định dạng QRC",
+					"spl": "",
 					"ttml": "Lời bài hát định dạng TTML",
 					"yrc": "Lời bài hát định dạng YRC"
 				},

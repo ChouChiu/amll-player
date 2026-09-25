@@ -5,6 +5,7 @@ import {
 	parseLrc,
 	parseLys,
 	parseQrc,
+	parseSPL,
 	parseYrc,
 } from "@applemusic-like-lyrics/lyric";
 import chalk from "chalk";
@@ -68,6 +69,28 @@ function pairLyric(line: LyricLine, lines: CoreLyricLine[], key: TransLine) {
 	}
 }
 
+/**
+ * SPL 中与上一行时间戳相同的歌词行视为辅助行，
+ * 依次作为该行的翻译与音译合并进去
+ */
+function foldSplAuxiliaryLines(lines: LyricLine[]): LyricLine[] {
+	const result: LyricLine[] = [];
+	let auxCount = 0;
+	for (const line of lines) {
+		const prev = result[result.length - 1];
+		const text = line.words.map((w) => w.word).join("");
+		if (prev && prev.startTime === line.startTime && auxCount < 2) {
+			if (auxCount === 0) prev.translatedLyric = text;
+			else prev.romanLyric = text;
+			auxCount++;
+			continue;
+		}
+		result.push({ ...line });
+		auxCount = 0;
+	}
+	return result;
+}
+
 interface LyricParserResult {
 	lyricLines: CoreLyricLine[];
 	hasLyrics: boolean;
@@ -100,6 +123,15 @@ export const useLyricParser = (
 				case "eslrc": {
 					parsedLyricLines = parseEslrc(lyricStr);
 					console.log(LYRIC_LOG_TAG, "解析出 ESLyRiC 歌词", parsedLyricLines);
+					break;
+				}
+				case "spl": {
+					parsedLyricLines = foldSplAuxiliaryLines(parseSPL(lyricStr));
+					console.log(
+						LYRIC_LOG_TAG,
+						"解析出 Salt Player Lyrics 歌词",
+						parsedLyricLines,
+					);
 					break;
 				}
 				case "yrc": {
