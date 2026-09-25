@@ -1,10 +1,10 @@
 import { branch, commit } from "virtual:git-metadata-plugin";
+import type { PaletteAlgorithm } from "@applemusic-like-lyrics/core";
 import {
-	MeshGradientRenderer,
-	PixiRenderer,
-} from "@applemusic-like-lyrics/core";
-import {
+	BACKGROUND_RENDERERS,
+	CSS_BACKGROUND_RENDERER_ID,
 	cssBackgroundPropertyAtom,
+	DEFAULT_BACKGROUND_RENDERER_ID,
 	enableLyricLineBlurEffectAtom,
 	enableLyricLineScaleEffectAtom,
 	enableLyricLineSpringAnimationAtom,
@@ -12,6 +12,8 @@ import {
 	enableLyricSwapTransRomanLineAtom,
 	enableLyricTranslationLineAtom,
 	fftDataRangeAtom,
+	isolationRendererOptionsAtom,
+	LYRIC_BACKGROUND_RENDERER_STORAGE_KEY,
 	type LyricBackgroundRenderer,
 	LyricSizePreset,
 	lyricBackgroundFPSAtom,
@@ -25,6 +27,7 @@ import {
 	lyricWordFadeWidthAtom,
 	PlayerControlsType,
 	playerControlsTypeAtom,
+	resolveBackgroundRenderer,
 	showBottomControlAtom,
 	showMusicAlbumAtom,
 	showMusicArtistsAtom,
@@ -834,6 +837,96 @@ const MusicInfoAppearanceSettings = () => {
 	);
 };
 
+const getBackgroundRendererId = (value: LyricBackgroundRenderer): string => {
+	if (value.renderer === CSS_BACKGROUND_RENDERER_ID)
+		return CSS_BACKGROUND_RENDERER_ID;
+	for (const [id, entry] of Object.entries(BACKGROUND_RENDERERS)) {
+		if (entry.renderer === value.renderer) return id;
+	}
+	return DEFAULT_BACKGROUND_RENDERER_ID;
+};
+
+const IsolationRendererSettings = () => {
+	const { t } = useTranslation();
+	const [options, setOptions] = useAtom(isolationRendererOptionsAtom);
+
+	return (
+		<>
+			<SettingEntry
+				label={t(
+					"page.settings.lyricBackground.isolation.paletteAlgorithm.label",
+					"取色算法",
+				)}
+				description={t(
+					"page.settings.lyricBackground.isolation.paletteAlgorithm.description",
+					"从专辑图中提取背景配色所使用的算法",
+				)}
+			>
+				<Select.Root
+					value={options.paletteAlgorithm}
+					onValueChange={(v) =>
+						setOptions((prev) => ({
+							...prev,
+							paletteAlgorithm: v as PaletteAlgorithm,
+						}))
+					}
+				>
+					<Select.Trigger />
+					<Select.Content>
+						<Select.Item value="auto">
+							{t(
+								"page.settings.lyricBackground.isolation.paletteAlgorithm.auto",
+								"自动择优（K-Means / 八叉树）",
+							)}
+						</Select.Item>
+						<Select.Item value="kmeans">K-Means</Select.Item>
+						<Select.Item value="octtree">
+							{t(
+								"page.settings.lyricBackground.isolation.paletteAlgorithm.octtree",
+								"八叉树",
+							)}
+						</Select.Item>
+					</Select.Content>
+				</Select.Root>
+			</SettingEntry>
+			<SettingEntry
+				label={t(
+					"page.settings.lyricBackground.isolation.lightWave.label",
+					"光波效果",
+				)}
+				description={t(
+					"page.settings.lyricBackground.isolation.lightWave.description",
+					"让渐变的明度随时间波动",
+				)}
+			>
+				<Switch
+					checked={options.lightWave}
+					onCheckedChange={(lightWave) =>
+						setOptions((prev) => ({ ...prev, lightWave }))
+					}
+				/>
+			</SettingEntry>
+			<SettingEntry
+				label={t(
+					"page.settings.lyricBackground.isolation.dithering.label",
+					"抖动",
+				)}
+				description={t(
+					"page.settings.lyricBackground.isolation.dithering.description",
+					"叠加极弱噪声消除渐变色带",
+				)}
+			>
+				<Switch
+					checked={options.dithering}
+					onCheckedChange={(dithering) =>
+						setOptions((prev) => ({ ...prev, dithering }))
+					}
+				/>
+			</SettingEntry>
+		</>
+	);
+};
+
 const LyricBackgroundSettings = () => {
 	const { t } = useTranslation();
 	const [backgroundRendererValue, setBackgroundRendererValue] = useAtom(
@@ -843,64 +936,51 @@ const LyricBackgroundSettings = () => {
 		cssBackgroundPropertyAtom,
 	);
 	const backgroundRendererMenu = useMemo(
-		() => [
-			{
-				label: t(
-					"page.settings.lyricBackground.menu.meshGradientRenderer",
-					"网格渐变渲染器",
-				),
-				value: "mesh",
-			},
-			{
-				label: t(
-					"page.settings.lyricBackground.menu.pixiRenderer",
-					"PixiJS 渲染器",
-				),
-				value: "pixi",
-			},
-			{
-				label: t(
-					"page.settings.lyricBackground.menu.cssBackground",
-					"CSS 背景",
-				),
-				value: "css-bg",
-			},
-		],
+		() =>
+			[
+				{
+					label: t(
+						"page.settings.lyricBackground.menu.meshGradientRenderer",
+						"网格渐变渲染器",
+					),
+					value: "mesh",
+				},
+				{
+					label: t(
+						"page.settings.lyricBackground.menu.pixiRenderer",
+						"PixiJS 渲染器",
+					),
+					value: "pixi",
+				},
+				{
+					label: t(
+						"page.settings.lyricBackground.menu.isolationRenderer",
+						"Isolation 渲染器",
+					),
+					value: "isolation",
+				},
+				{
+					label: t(
+						"page.settings.lyricBackground.menu.cssBackground",
+						"CSS 背景",
+					),
+					value: CSS_BACKGROUND_RENDERER_ID,
+				},
+			].filter(
+				(item) =>
+					item.value === CSS_BACKGROUND_RENDERER_ID ||
+					BACKGROUND_RENDERERS[item.value]?.isSupported(),
+			),
 		[t],
 	);
 
-	const getBackgroundRendererString = (
-		value: LyricBackgroundRenderer,
-	): string => {
-		if (typeof value.renderer === "string" && value.renderer === "css-bg")
-			return "css-bg";
-		if (value.renderer === MeshGradientRenderer) return "mesh";
-		if (value.renderer === PixiRenderer) return "pixi";
-		return "mesh";
-	};
+	const backgroundRendererId = getBackgroundRendererId(backgroundRendererValue);
 
-	const handleBackgroundRendererChange = (selectedString: string) => {
-		let rendererObject: LyricBackgroundRenderer;
-		switch (selectedString) {
-			case "mesh":
-				rendererObject = {
-					renderer: MeshGradientRenderer,
-				};
-				break;
-			case "pixi":
-				rendererObject = {
-					renderer: PixiRenderer,
-				};
-				break;
-			default:
-				rendererObject = { renderer: "css-bg" };
-				break;
-		}
-		setBackgroundRendererValue(rendererObject);
-		localStorage.setItem(
-			"amll-react-full.lyricBackgroundRenderer",
-			selectedString,
-		);
+	const handleBackgroundRendererChange = (selectedId: string) => {
+		setBackgroundRendererValue({
+			renderer: resolveBackgroundRenderer(selectedId),
+		});
+		localStorage.setItem(LYRIC_BACKGROUND_RENDERER_STORAGE_KEY, selectedId);
 	};
 
 	return (
@@ -915,7 +995,7 @@ const LyricBackgroundSettings = () => {
 				)}
 			>
 				<Select.Root
-					value={getBackgroundRendererString(backgroundRendererValue)}
+					value={backgroundRendererId}
 					onValueChange={handleBackgroundRendererChange}
 				>
 					<Select.Trigger />
@@ -929,7 +1009,7 @@ const LyricBackgroundSettings = () => {
 				</Select.Root>
 			</SettingEntry>
 
-			{getBackgroundRendererString(backgroundRendererValue) === "css-bg" ? (
+			{backgroundRendererId === CSS_BACKGROUND_RENDERER_ID ? (
 				<SettingEntry
 					label={t(
 						"page.settings.lyricBackground.lyricBackgroundColor.label",
@@ -990,6 +1070,9 @@ const LyricBackgroundSettings = () => {
 						)}
 						configAtom={lyricBackgroundStaticModeAtom}
 					/>
+					{backgroundRendererId === "isolation" && (
+						<IsolationRendererSettings />
+					)}
 				</>
 			)}
 		</>
@@ -1260,9 +1343,7 @@ const ContributorsSection: FC = () => {
 
 	return (
 		<Box my="4">
-			<SubTitle my="2">
-				{t("page.about.contributorsTitle", "贡献者")}
-			</SubTitle>
+			<SubTitle my="2">{t("page.about.contributorsTitle", "贡献者")}</SubTitle>
 			<Grid
 				style={{ gridTemplateColumns: "repeat(auto-fill, minmax(20rem, 1fr))" }}
 				gap="3"
