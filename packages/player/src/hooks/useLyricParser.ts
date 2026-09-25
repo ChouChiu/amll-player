@@ -70,23 +70,29 @@ function pairLyric(line: LyricLine, lines: CoreLyricLine[], key: TransLine) {
 }
 
 /**
- * SPL 中与上一行时间戳相同的歌词行视为辅助行，
- * 依次作为该行的翻译与音译合并进去
+ * 按 SPL 标准合并翻译行：同一时间戳的第一句为主歌词，其后的都是翻译（支持多行翻译）
+ *
+ * parseSPL 已经按时间稳定排序，并为省略时间戳的翻译行补上了主歌词的时间戳，
+ * 所以同时间戳的行在这里一定相邻
+ *
+ * @see https://moriafly.com/standards/spl.html
  */
-function foldSplAuxiliaryLines(lines: LyricLine[]): LyricLine[] {
+function foldSplTranslationLines(lines: LyricLine[]): LyricLine[] {
 	const result: LyricLine[] = [];
-	let auxCount = 0;
 	for (const line of lines) {
 		const prev = result[result.length - 1];
-		const text = line.words.map((w) => w.word).join("");
-		if (prev && prev.startTime === line.startTime && auxCount < 2) {
-			if (auxCount === 0) prev.translatedLyric = text;
-			else prev.romanLyric = text;
-			auxCount++;
+		if (prev && prev.startTime === line.startTime) {
+			const text = line.words
+				.map((w) => w.word)
+				.join("")
+				.trim();
+			if (text.length > 0)
+				prev.translatedLyric = prev.translatedLyric
+					? `${prev.translatedLyric} / ${text}`
+					: text;
 			continue;
 		}
 		result.push({ ...line });
-		auxCount = 0;
 	}
 	return result;
 }
@@ -126,7 +132,7 @@ export const useLyricParser = (
 					break;
 				}
 				case "spl": {
-					parsedLyricLines = foldSplAuxiliaryLines(parseSPL(lyricStr));
+					parsedLyricLines = foldSplTranslationLines(parseSPL(lyricStr));
 					console.log(
 						LYRIC_LOG_TAG,
 						"解析出 Salt Player Lyrics 歌词",
