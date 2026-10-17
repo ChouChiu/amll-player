@@ -31,6 +31,7 @@ import {
 	hideNowPlayingBarAtom,
 	playlistCardOpenedAtom,
 } from "../../states/appAtoms.ts";
+import { useDecodedImageUrl } from "../../utils/use-decoded-image-url.ts";
 import { NowPlaylistCard } from "../NowPlaylistCard/index.tsx";
 import styles from "./index.module.css";
 
@@ -39,7 +40,7 @@ export const NowPlayingBar: FC = () => {
 	const musicName = useAtomValue(musicNameAtom);
 	const musicArtists = useAtomValue(musicArtistsAtom);
 	const musicPlaying = useAtomValue(musicPlayingAtom);
-	const musicCover = useAtomValue(musicCoverAtom);
+	const musicCover = useDecodedImageUrl(useAtomValue(musicCoverAtom));
 	const [playlistOpened, setPlaylistOpened] = useAtom(playlistCardOpenedAtom);
 	const setLyricPageOpened = useSetAtom(isLyricPageOpenedAtom);
 
@@ -108,7 +109,9 @@ export const NowPlayingBar: FC = () => {
 						className={styles.coverButton}
 						type="button"
 						style={{
-							backgroundImage: `url(${musicCover})`,
+							backgroundImage: musicCover
+								? `url(${JSON.stringify(musicCover)})`
+								: "none",
 						}}
 						onClick={() => setLyricPageOpened(true)}
 					>
