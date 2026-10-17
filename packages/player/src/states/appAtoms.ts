@@ -21,10 +21,8 @@ export const darkModeAtom = atomWithStorage(
 	DarkMode.Auto,
 );
 
-export const musicContextModeAtom = atomWithStorage(
-	"amll-player.musicContextMode",
-	MusicContextMode.Local,
-);
+// 不持久化：WS 模式只随接收页面存在，异常退出后不应残留
+export const musicContextModeAtom = atom(MusicContextMode.Local);
 
 export const advanceLyricDynamicLyricTimeAtom = atomWithStorage(
 	"amll-player.advanceLyricDynamicLyricTimeAtom",

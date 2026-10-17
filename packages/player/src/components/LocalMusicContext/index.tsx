@@ -389,18 +389,18 @@ export const LocalMusicContext: FC = () => {
 		store.set(queueManagerAtom, queueManager);
 
 		// 恢复上次的队列信息
-		queueManager.restore().then(({ restored, position }) => {
+		queueManager.restore().then(async ({ restored, position }) => {
 			if (restored) {
 				const currentSong = queueManager.getCurrentSong();
 				if (currentSong) {
-					// 恢复播放进度
-					emitAudioThread("playAudio", {
+					// 必须逐条 await，并发 invoke 到达音频线程的顺序不确定，pauseAudio 抢先会导致直接开播
+					await emitAudioThread("playAudio", {
 						song: {
 							songId: currentSong.id,
 							filePath: currentSong.filePath,
 						},
 					});
-					emitAudioThread("pauseAudio");
+					await emitAudioThread("pauseAudio");
 
 					if (position > 0) {
 						lastSyncRef.current = {
