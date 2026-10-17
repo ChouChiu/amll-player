@@ -58,6 +58,8 @@ pub struct CpalCallbackState {
     pub volume_bits: Arc<AtomicU32>,
     pub track_finished: Arc<AtomicBool>,
     pub consumed_frames: Arc<AtomicU64>,
+    // ALSA 在流刚 play、尚未进入 RUNNING 时会拒绝 pause 且 cpal 吞掉错误，只能在回调里软件暂停
+    pub paused: Arc<AtomicBool>,
 }
 
 impl Default for CpalCallbackState {
@@ -66,6 +68,7 @@ impl Default for CpalCallbackState {
             volume_bits: Arc::new(AtomicU32::new(1.0_f32.to_bits())),
             track_finished: Arc::new(AtomicBool::new(false)),
             consumed_frames: Arc::new(AtomicU64::new(0)),
+            paused: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -304,6 +307,7 @@ impl AudioPlayer {
         if let Some(ref data) = msg.data {
             match data {
                 AudioThreadMessage::ResumeAudio => {
+                    self.cpal_state.paused.store(false, Ordering::Release);
                     if let Some(stream) = &self.current_stream {
                         let _ = stream.play();
                     }
@@ -314,6 +318,7 @@ impl AudioPlayer {
                         .await;
                 }
                 AudioThreadMessage::PauseAudio => {
+                    self.cpal_state.paused.store(true, Ordering::Release);
                     if let Some(stream) = &self.current_stream {
                         let _ = stream.pause();
                     }
@@ -325,6 +330,9 @@ impl AudioPlayer {
                 }
                 AudioThreadMessage::ResumeOrPauseAudio => {
                     let is_playing_now = !*self.is_playing_rx.borrow();
+                    self.cpal_state
+                        .paused
+                        .store(!is_playing_now, Ordering::Release);
 
                     if let Some(stream) = &self.current_stream {
                         if is_playing_now {
@@ -460,7 +468,9 @@ impl AudioPlayer {
         let song_data = self.current_song.clone().context("没有当前歌曲可播放")?;
 
         let source_stream: Box<dyn CustomMediaSource> =
-            if song_data.file_path.starts_with("http://") || song_data.file_path.starts_with("https://") {
+            if song_data.file_path.starts_with("http://")
+                || song_data.file_path.starts_with("https://")
+            {
                 let bytes = reqwest::get(&song_data.file_path)
                     .await
                     .with_context(|| format!("下载 {} 失败", song_data.file_path))?
@@ -502,6 +512,7 @@ impl AudioPlayer {
             .track_finished
             .store(false, Ordering::Release);
         cpal_state_clone.consumed_frames.store(0, Ordering::Release);
+        cpal_state_clone.paused.store(false, Ordering::Release);
         cpal_state_clone
             .volume_bits
             .store(self.volume.to_bits(), Ordering::Relaxed);
@@ -511,6 +522,10 @@ impl AudioPlayer {
         let stream = self.cpal_device.build_output_stream(
             &self.cpal_config,
             move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                if cpal_state_clone.paused.load(Ordering::Acquire) {
+                    data.fill(0.0);
+                    return;
+                }
                 let current_volume =
                     f32::from_bits(cpal_state_clone.volume_bits.load(Ordering::Relaxed));
                 let mut eof_reached = false;
